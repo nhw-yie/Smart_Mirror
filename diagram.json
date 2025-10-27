@@ -31,6 +31,13 @@
       "top": -294.4,
       "left": -124,
       "attrs": {}
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btn1",
+      "top": -205,
+      "left": -384,
+      "attrs": { "color": "green", "xray": "1" }
     }
   ],
   "connections": [
@@ -47,8 +54,9 @@
     [ "oled1:SCL", "esp:22", "purple", [ "v0" ] ],
     [ "ldr1:VCC", "esp:3V3", "red", [ "v0" ] ],
     [ "ldr1:GND", "esp:GND.2", "black", [ "v0" ] ],
-    [ "ldr1:OUT", "esp:34", "green", [ "v0" ] ]
-
+    [ "ldr1:OUT", "esp:34", "green", [ "v0" ] ],
+    [ "btn1:1", "esp:32", "green", [] ],
+    [ "btn1:2", "esp:GND.2", "black", [] ]
   ],
   "dependencies": {}
 }

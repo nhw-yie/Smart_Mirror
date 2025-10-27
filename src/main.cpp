@@ -1,9 +1,26 @@
+// --- Simulation / ESP-SR demo ---
+// audio file to play from SPIFFS. We will convert hiesp.mp3 -> hiesp.raw (16-bit LE PCM mono)
+const char* kAudioPath = "/hiesp.raw"; // upload to SPIFFS via pio uploadfs
+// Do not auto-play on boot; button will trigger playback
+bool _sim_play_once = false;
+const float kRmsThreshold = 800.0; // điều chỉnh tuỳ file (kept for RMS demo)
+const int kConsecutiveThreshold = 3;
+
+// --- Button configuration ---
+const int BUTTON_PIN = 32; // GPIO32 (input)
+const unsigned long DEBOUNCE_MS = 50;
+bool lastButtonState = true; // assuming pull-up (true == HIGH)
+unsigned long lastDebounceTime = 0;
+bool buttonState = true; // stable state (true == not pressed with INPUT_PULLUP)
+
+// --- Existing code continues here ---
 #include "DHTesp.h"
 #include <WiFi.h>
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <HTTPClient.h>
+#include "SPIFFS.h"
 
 // --- Cấu hình chân ---
 const int DHT_PIN = 15;
@@ -26,6 +43,8 @@ void setup() {
   dht.setup(DHT_PIN, DHTesp::DHT22);
   pinMode(BUZZER_PIN, OUTPUT);
   pinMode(LDR_PIN, INPUT);
+  // Button: use internal pull-up so button connects to GND when pressed
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
 
   // --- Khởi tạo màn hình OLED ---
   Wire.begin(21, 22);
@@ -64,6 +83,89 @@ void setup() {
   display.println(WiFi.localIP());
   display.display();
   delay(2000);
+
+  // Mount SPIFFS early so file presence is known
+  if (!SPIFFS.begin(true)) {
+    Serial.println("SPIFFS mount failed in setup");
+  } else {
+    Serial.println("SPIFFS mounted");
+  }
+}
+
+// gọi khi wakeword được "phát hiện"
+void on_wakeword_detected() {
+  Serial.println("Wakeword detected: Hi ESP");
+  // Hiển thị trên OLED
+  display.clearDisplay();
+  display.setTextSize(2);
+  display.setCursor(0, 10);
+  display.println("Wakeword:");
+  display.println("Hi ESP");
+  display.display();
+
+  // Buzz ngắn
+  tone(BUZZER_PIN, 2000);
+  delay(300);
+  noTone(BUZZER_PIN);
+
+  // quay lại màn hình bình thường sau 1s
+  delay(1000);
+}
+
+// tính RMS của mẫu int16
+float compute_rms(const int16_t* samples, size_t count) {
+  long acc = 0;
+  for (size_t i = 0; i < count; ++i) {
+    long v = samples[i];
+    acc += v * v;
+  }
+  if (count == 0) return 0;
+  return sqrt((float)acc / (float)count);
+}
+
+// đọc file âm thanh (16-bit LE PCM mono) từ SPIFFS và "feed" từng chunk
+void play_audio_file_from_spiffs(const char* path, unsigned int chunkSamples = 160, unsigned int pauseMs = 20) {
+  if (!SPIFFS.begin(true)) {
+    Serial.println("SPIFFS mount failed");
+    return;
+  }
+  File f = SPIFFS.open(path, FILE_READ);
+  if (!f) {
+    Serial.printf("Audio file not found: %s\n", path);
+    return;
+  }
+
+  const size_t chunkBytes = chunkSamples * 2; // 16-bit
+  uint8_t buf[512];
+  int consecutive_high = 0;
+
+  while (f.available()) {
+    size_t toRead = min(sizeof(buf), chunkBytes);
+    size_t r = f.read(buf, toRead);
+    size_t samples = r / 2;
+    static int16_t sarr[256]; // đủ cho chunkSamples <= 256
+    if (samples > sizeof(sarr)/sizeof(sarr[0])) samples = sizeof(sarr)/sizeof(sarr[0]);
+    for (size_t i = 0; i < samples; ++i) {
+      sarr[i] = (int16_t)((buf[2*i+1] << 8) | (buf[2*i] & 0xFF));
+    }
+
+    float rms = compute_rms(sarr, samples);
+    Serial.printf("chunk samples=%u rms=%.1f\n", (unsigned)samples, rms);
+
+    if (rms > kRmsThreshold) {
+      consecutive_high++;
+      if (consecutive_high >= kConsecutiveThreshold) {
+        on_wakeword_detected();
+        break; // chỉ demo 1 lần
+      }
+    } else {
+      consecutive_high = 0;
+    }
+
+    delay(pauseMs);
+  }
+
+  f.close();
 }
 
 void loop() {
@@ -137,9 +239,29 @@ void loop() {
     display.println("Trang thai: OK");
   }
 
+  // --- Button handling (debounce) ---
+  int reading = digitalRead(BUTTON_PIN);
+  if (reading != lastButtonState) {
+    lastDebounceTime = millis();
+  }
+
+  if ((millis() - lastDebounceTime) > DEBOUNCE_MS) {
+    // If the reading has been stable and is different from the current stable state
+    if (reading != buttonState) {
+      buttonState = reading;
+      // active low button pressed
+      if (buttonState == LOW) {
+        Serial.println("Button pressed: starting playback...");
+        play_audio_file_from_spiffs(kAudioPath, 160, 20);
+        Serial.println("Playback finished.");
+      }
+    }
+  }
+  lastButtonState = reading;
+
   if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
-    http.begin("http://10.144.210.159:5000/update");  // ⚠️ Đổi IP tại đây!
+    http.begin("http://172.17.33.191:5000/update");  // Đổi IP tại đây!
     http.addHeader("Content-Type", "application/json");
 
     String json = "{\"temperature\": " + String(data.temperature, 2) +
@@ -159,5 +281,6 @@ void loop() {
   }
 
   display.display();
-  delay(3000);
+  delay(180000);
+  //delay(3000);
 }

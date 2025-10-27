@@ -1,119 +1,42 @@
 <!doctype html>
-<html lang="vi">
+<html>
 <head>
-  <meta charset="utf-8" />
+  <meta charset="utf-8">
   <title>Smart Mirror Dashboard</title>
   <style>
-    body {
-      font-family: "Segoe UI", Arial, sans-serif;
-      background: linear-gradient(180deg, #0d1117, #161b22);
-      color: #e6edf3;
-      display: flex;
-      justify-content: center;
-      align-items: flex-start;
-      min-height: 100vh;
-      margin: 0;
-      padding: 40px 0;
-    }
-
-    #container {
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 16px;
-      padding: 24px 32px;
-      width: 480px;
-      box-shadow: 0 0 20px rgba(0,0,0,0.3);
-      backdrop-filter: blur(8px);
-    }
-
-    h2 {
-      text-align: center;
-      font-weight: 600;
-      margin-bottom: 16px;
-    }
-
-    .section {
-      margin-bottom: 20px;
-    }
-
-    .label {
-      font-weight: bold;
-      color: #58a6ff;
-    }
-
-    .value {
-      float: right;
-      color: #e6edf3;
-    }
-
-    hr {
-      border: none;
-      border-top: 1px solid rgba(255, 255, 255, 0.1);
-      margin: 16px 0;
-    }
-
-    .muted {
-      color: #8b949e;
-      font-size: 0.85em;
-      text-align: right;
-    }
-
-    button {
-      background: #238636;
-      border: none;
-      color: white;
-      padding: 10px 16px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 0.95em;
-      transition: background 0.2s;
-    }
-
-    button:hover {
-      background: #2ea043;
-    }
-
-    img {
-      width: 100%;
-      border-radius: 8px;
-      margin-top: 10px;
-      border: 1px solid rgba(255,255,255,0.1);
-    }
+    body { font-family: sans-serif; background:#222; color:#eee; padding:20px; }
+    .section { margin-bottom: 18px; padding:12px; border-radius:8px; background:#2b2b2b; }
+    .label { color:#bbb; margin-right:6px; }
+    #image_area img { max-width:100%; height:auto; border-radius:8px; margin-top:8px; }
   </style>
 </head>
 <body>
-  <div id="container">
-    <h2>🪞 Smart Mirror Dashboard</h2>
+  <h2>🪞 Smart Mirror Dashboard</h2>
 
-    <div class="section">
-      <div><span class="label">Thiết bị:</span> <span class="value" id="device">{{ state.device }}</span></div>
-      <div><span class="label">WiFi:</span> <span class="value" id="wifi">{{ state.wifi }}</span></div>
-      <div><span class="label">Địa chỉ IP:</span> <span class="value" id="ip">{{ state.ip }}</span></div>
-      <div><span class="label">Sự kiện:</span> <span class="value" id="event">{{ state.last_event }}</span></div>
-    </div>
+  <div class="section">
+    <div><span class="label">Thiết bị:</span> <span id="device">{{ state.device }}</span></div>
+    <div><span class="label">WiFi:</span> <span id="wifi">{{ state.wifi }}</span></div>
+    <div><span class="label">Địa chỉ IP:</span> <span id="ip">{{ state.ip }}</span></div>
+    <div><span class="label">Sự kiện:</span> <span id="event">{{ state.last_event }}</span></div>
+    <div><span class="label">Voice mode:</span> <span id="voice_mode">{{ state.voice_mode }}</span></div>
+    <div><span class="label">Voice reply:</span> <span id="voice_reply">{{ state.last_voice_response }}</span></div>
+  </div>
 
-    <hr/>
+  <div class="section">
+    <h3>Sensor</h3>
+    <div><span class="label">🌡️ Nhiệt độ:</span> <span id="temp">{{ state.temperature or "?" }} °C</span></div>
+    <div><span class="label">💧 Độ ẩm:</span> <span id="hum">{{ state.humidity or "?" }} %</span></div>
+    <div><span class="label">💡 Ánh sáng:</span> <span id="light">{{ state.light or "?" }} %</span></div>
+    <div><span class="label">🌫️ PM2.5:</span> <span id="pm25">{{ state.pm25 or "?" }} µg/m³</span></div>
+    <div><span class="label">🌫️ PM10:</span> <span id="pm10">{{ state.pm10 or "?" }} µg/m³</span></div>
+  </div>
 
-    <div class="section">
-      <div><span class="label">🌡️ Nhiệt độ:</span> <span class="value" id="temp">{{ state.temperature or "?" }} °C</span></div>
-      <div><span class="label">💧 Độ ẩm:</span> <span class="value" id="hum">{{ state.humidity or "?" }} %</span></div>
-      <div><span class="label">💡 Ánh sáng:</span> <span class="value" id="light">{{ state.light or "?" }} %</span></div>
-      <div><span class="label">🌫️ PM2.5:</span> <span class="value" id="pm25">{{ state.pm25 or "?" }} µg/m³</span></div>
-      <div><span class="label">🌫️ PM10:</span> <span class="value" id="pm10">{{ state.pm10 or "?" }} µg/m³</span></div>
-    </div>
-
-    <div class="muted">Cập nhật lần cuối: <span id="last_update">{{ state.last_update }}</span></div>
-
-    <hr/>
-
-    <div class="section" style="text-align:center;">
-      <button onclick="generate()">🎨 Tạo ảnh ngẫu nhiên</button>
-      <div id="image_area"></div>
-    </div>
+  <div class="section" style="text-align:center;">
+    <button onclick="fetch('/api/generate', {method:'POST'}).then(r=>r.json()).then(j=>showImage(j.url))">🎨 Tạo ảnh</button>
+    <div id="image_area">{% if state.generated_image %}<img src="{{ state.generated_image }}">{% endif %}</div>
   </div>
 
   <script>
-    // Kết nối SSE từ Flask
     const evtSource = new EventSource("/events");
     evtSource.onmessage = function(e) {
       const data = JSON.parse(e.data);
@@ -121,25 +44,16 @@
       if (data.wifi !== undefined) document.getElementById("wifi").innerText = data.wifi;
       if (data.ip !== undefined) document.getElementById("ip").innerText = data.ip;
       if (data.last_event !== undefined) document.getElementById("event").innerText = data.last_event;
-      if (data.last_update !== undefined) document.getElementById("last_update").innerText = data.last_update;
-
-      // Cập nhật cảm biến
-      if (data.temperature !== undefined) document.getElementById("temp").innerText = data.temperature.toFixed(1) + " °C";
-      if (data.humidity !== undefined) document.getElementById("hum").innerText = data.humidity.toFixed(1) + " %";
-      if (data.light !== undefined) document.getElementById("light").innerText = data.light.toFixed(1) + " %";
-      if (data.pm25 !== undefined) document.getElementById("pm25").innerText = data.pm25.toFixed(1) + " µg/m³";
-      if (data.pm10 !== undefined) document.getElementById("pm10").innerText = data.pm10.toFixed(1) + " µg/m³";
-
+      if (data.last_update !== undefined) {/* not shown */}
+      if (data.temperature !== undefined) document.getElementById("temp").innerText = data.temperature + " °C";
+      if (data.humidity !== undefined) document.getElementById("hum").innerText = data.humidity + " %";
+      if (data.light !== undefined) document.getElementById("light").innerText = data.light + " %";
+      if (data.pm25 !== undefined) document.getElementById("pm25").innerText = data.pm25 + " µg/m³";
+      if (data.pm10 !== undefined) document.getElementById("pm10").innerText = data.pm10 + " µg/m³";
+      if (data.voice_mode !== undefined) document.getElementById("voice_mode").innerText = data.voice_mode;
+      if (data.last_voice_response !== undefined) document.getElementById("voice_reply").innerText = data.last_voice_response;
       if (data.generated_image) showImage(data.generated_image);
     };
-
-    async function generate() {
-      const area = document.getElementById("image_area");
-      area.innerHTML = "<p class='muted'>Đang tạo ảnh...</p>";
-      const res = await fetch("/api/generate", { method: "POST" });
-      const j = await res.json();
-      showImage(j.url);
-    }
 
     function showImage(url) {
       const area = document.getElementById("image_area");
